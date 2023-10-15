@@ -1,0 +1,9 @@
+openai
+fastapi
+websockets
+langchain
+uvicorn
+weaviate-client
+tiktoken
+
+
