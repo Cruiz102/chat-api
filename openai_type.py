@@ -17,7 +17,7 @@ from pydantic import BaseSettings
 import shortuuid
 import tiktoken
 import uvicorn
-from protocols import APIChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseChoice, ChatCompletionRequest
+from protocols import APIChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseChoice, ChatCompletionRequest, UsageInfo
 
 app_settings = AppSettings()
 app = fastapi.FastAPI()
@@ -60,6 +60,48 @@ async def check_model(request: ChatCompletionRequest, token: str) -> Optional[JS
         )
     return ret
 
+
+def check_requests(request) -> Optional[JSONResponse]:
+    # Check all params
+    if request.max_tokens is not None and request.max_tokens <= 0:
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.max_tokens} is less than the minimum of 1 - 'max_tokens'",
+        )
+    if request.n is not None and request.n <= 0:
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.n} is less than the minimum of 1 - 'n'",
+        )
+    if request.temperature is not None and request.temperature < 0:
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.temperature} is less than the minimum of 0 - 'temperature'",
+        )
+    if request.temperature is not None and request.temperature > 2:
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.temperature} is greater than the maximum of 2 - 'temperature'",
+        )
+    if request.top_p is not None and request.top_p < 0:
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.top_p} is less than the minimum of 0 - 'top_p'",
+        )
+    if request.top_p is not None and request.top_p > 1:
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.top_p} is greater than the maximum of 1 - 'temperature'",
+        )
+    if request.stop is not None and (
+        not isinstance(request.stop, str) and not isinstance(request.stop, list)
+    ):
+        return create_error_response(
+            ErrorCode.PARAM_OUT_OF_RANGE,
+            f"{request.stop} is not valid under any of the given schemas - 'stop'",
+        )
+
+    return None
 
 def _add_to_set(s, new_stop):
     if not s:
@@ -153,7 +195,6 @@ async def create_chat_completion(request: ChatCompletionRequest,  token: str = D
     if error_check_ret is not None:
         return error_check_ret
 
-    worker_addr = await get_worker_address(request.model)
 
     gen_params = await get_gen_params(
         request.model,

@@ -6,69 +6,12 @@ from langchain.document_loaders import PyPDFLoader
 import tempfile
 from langchain.vectorstores import Weaviate
 import weaviate
+from fastapi.responses import JSONResponse
+
+
+from protocols import ChatCompletionRequest, StreamChatCompletionResponseChoice, ChatMessage
 # Initialize FastAPI app
 app = FastAPI()
-
-client = weaviate.Client(
-url=WEAVIATE_URL,
-auth_client_secret=weaviate.AuthApiKey(api_key=WEAVIATE_API_KEY),
-additional_headers={
-    "X-OpenAI-Api-Key": os.environ["OPENAI_API_KEY"]
-}
-)
-
-class Weaviate_Object(BaseModel):
-    text: datetime
-    document: Tuple[int, int]
-    page: int
-    extracted_method: str
-    author: str
-
-
-def create_class(class_name: str, client ):
-    class_obj = {
-        "class": class_name,
-        "vectorizer": "text2vec-openai", 
-        "moduleConfig": {
-            "text2vec-openai": {},
-            "generative-openai": {} 
-            },
-        "properties": [
-            {
-                "dataType": ["string"],
-                "description": "Content of the Chunk",
-                "name": "text"
-            },
-            {
-                "dataType": ["string"],
-                "description": "Name of the document",
-                "name": "document"
-            },
-            {
-                "dataType": ["int"],
-                "description": "Page of the document where is the chunk",
-                "name": "page"
-            },
-
-        ]
-    }
-    client.schema.create_class(class_obj)
-
-
-def add_object(client, objects_list, class_name):
-    client.batch.configure(batch_size=100)
-    with client.batch as batch:
-        for i, d in enumerate(objects_list):
-            print(f"importing question: {i+1}")
-            object = {
-            "text": d.page_content,
-             "document": d.metadata["source"],   
-             "page": d.metadata["page"]
-        }
-        batch.add_data_object(
-            data_object=object,
-            class_name= class_name
-        )
 
 
 import fitz  # PyMuPDF
@@ -121,6 +64,87 @@ async def upload_pdf(file: UploadFile = File(...), class_name: str = ""):
         return JSONResponse(content={"status": "success", "message": "Objects successfully added to Weaviate"})
     except Exception as e:
         return HTTPException(status_code=500, detail=str(e))
+    
+
+class QueueCallback(BaseCallbackHandler):
+    """Callback handler for streaming LLM responses to a queue."""
+
+    # https://gist.github.com/mortymike/70711b028311681e5f3c6511031d5d43
+
+    def __init__(self, q):
+        self.q = q
+
+    def on_llm_new_token(self, token: str, **kwargs: any) -> None:
+        self.q.put(token)
+
+    def on_llm_end(self, *args, **kwargs: any) -> None:
+        return self.q.empty()
+
+
+
+@app.post("/chat")
+async def chat_endpoint(request: ChatCompletionRequest):
+    global run_id, feedback_recorded, trace_url
+    run_id = None
+    trace_url = None
+    feedback_recorded = False
+
+
+    question = request.message
+    chat_history = request.history
+    print(chat_history)
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    for message in chat_history:
+        print(message)
+        memory.save_context(
+            {"question": message.role}, {"result": message.content}
+        )
+
+    def stream() -> Generator:
+        global run_id, trace_url, feedback_recorded
+
+        q = Queue()
+        job_done = object()
+
+        llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            streaming=True,
+            temperature=0,
+            callbacks=[QueueCallback(q)],
+        )
+
+        def task():
+            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff", retriever=get_retriever(),condense_question_prompt=request.systemPrompt, memory = memory)
+            result = qa({"question": question})
+            q.put(job_done)
+
+        t = Thread(target=task)
+        t.start()
+
+
+        while True:
+            try:
+                next_token = q.get(True, timeout=1)
+                if next_token is job_done:
+                    break
+
+                chat_response = StreamChatCompletionResponseChoice(
+                id= request.id,
+                model=request.model,
+                choices= StreamChatCompletionResponseChoice(
+                    index= 0, delta= ChatMessage(role="assistant", content= next_token),
+                    finish_reason= None
+                ),  # Your choices here, possibly including `content`
+                usage=UsageInfo(prompt_tokens=10, total_tokens=50)  # Example usage info
+            )
+
+
+                yield next_token
+            except Empty:
+                continue
+
+    return StreamingResponse(stream())
+
 
 
 

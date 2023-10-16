@@ -51,3 +51,24 @@ def google_cloud_ocr_request(access_token: str, pdf_file_path: str):
         print(text)
 
 
+def count_images_and_pages(pdf_path):
+    pdf_document = fitz.open(pdf_path)
+    page_count = len(pdf_document)
+    image_count = 0
+
+    for page_number in range(page_count):
+        page = pdf_document.load_page(page_number)
+        img_list = page.get_images(full=True)
+        image_count += len(img_list)
+
+    pdf_document.close()
+    return page_count, image_count
+
+def should_use_ocr(pdf_path):
+    page_count, image_count = count_images_and_pages(pdf_path)
+    print(page_count, image_count)
+    if image_count / page_count >= 0.9:
+        return True  # Use OCR
+    else:
+        return False  # Use PDF Reader
+

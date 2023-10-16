@@ -42,6 +42,13 @@ class ChatCompletionResponseChoice(BaseModel):
     finish_reason: Optional[Literal["stop", "length"]] = None
 
 
+class StreamChatCompletionResponseChoice(BaseModel):
+    index: int
+    delta: ChatMessage
+    finish_reason: Optional[Literal["stop", "length"]] = None
+
+
+
 class UsageInfo(BaseModel):
     prompt_tokens: int = 0
     total_tokens: int = 0
@@ -53,5 +60,5 @@ class ChatCompletionResponse(BaseModel):
     object: str = "chat.completion"
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
-    choices: List[ChatCompletionResponseChoice]
+    choices: List[StreamChatCompletionResponseChoice]
     usage: UsageInfo
