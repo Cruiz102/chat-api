@@ -2,6 +2,9 @@ import base64
 import json
 import requests
 import json
+import fitz  # PyMuPDF
+import io
+from PIL import Image
 
 
 def create_request_json(pdf_file_path: str):

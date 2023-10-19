@@ -34,6 +34,8 @@ class ChatCompletionRequest(BaseModel):
 class ChatMessage(BaseModel):
     role: str
     content: str
+class StreamChatMessage(BaseModel):
+    content: str
 
 
 class ChatCompletionResponseChoice(BaseModel):
@@ -43,8 +45,8 @@ class ChatCompletionResponseChoice(BaseModel):
 
 
 class StreamChatCompletionResponseChoice(BaseModel):
-    index: int
-    delta: ChatMessage
+    index: int = 0
+    delta: StreamChatMessage
     finish_reason: Optional[Literal["stop", "length"]] = None
 
 
@@ -60,5 +62,12 @@ class ChatCompletionResponse(BaseModel):
     object: str = "chat.completion"
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
-    choices: List[StreamChatCompletionResponseChoice]
+    choices: List[ChatCompletionResponseChoice]
     usage: UsageInfo
+
+class StreamChatCompletionResponse(BaseModel):
+    id: str = Field(default_factory=lambda: f"chatcmpl-{shortuuid.random()}")
+    object: str = "chat.completion.chunk"
+    created: int = Field(default_factory=lambda: int(time.time()))
+    model: str
+    choices: List[StreamChatCompletionResponseChoice]

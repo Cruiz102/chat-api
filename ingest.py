@@ -126,6 +126,38 @@ async def upload_pdf(file: UploadFile = File(...), class_name: str = ""):
 
 
 
+import fitz  # PyMuPDF
+import io
+from PIL import Image
+
+@app.post("/upload_pdf/")
+async def upload_pdf(file: UploadFile = File(...), class_name: str = ""):
+    try:
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        pdf_path = temp_file.name
+
+        # Write the uploaded content to this file
+        content = await file.read()
+        temp_file.write(content)
+        temp_file.close()
+
+        # Use PyPDFLoader to load and split the PDF
+        if should_use_ocr(pdf_path):
+            use_cloud()
+        else:
+            loader = PyPDFLoader(pdf_path)
+            pages = loader.load_and_split()
+
+        # Add the objects to Weaviate
+        add_object(client, weaviate_objects, class_name)
+
+        return JSONResponse(content={"status": "success", "message": "Objects successfully added to Weaviate"})
+    except Exception as e:
+        return HTTPException(status_code=500, detail=str(e))
+    
+
+
 def ingest_docs(args, client):
     documents = list_pdf_files(args.pdf_folder)
     # Check for errors when loading the pdfs

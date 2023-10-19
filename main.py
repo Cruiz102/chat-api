@@ -25,8 +25,8 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chains import ConversationalRetrievalChain
 WEAVIATE_DOCS_INDEX_NAME = "Research2"
 app = FastAPI()
-WEAVIATE_URL = os.environ["WEAVIATE_URL"]
-WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
+# WEAVIATE_URL = os.environ["WEAVIATE_URL"]
+# WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -130,7 +130,7 @@ async def chat_endpoint(request: ChatRequest):
     for message in chat_history:
         print(message)
         memory.save_context(
-            {"question": message.role}, {"result": message.content}
+            {"question": message.question}, {"result": message.result}
         )
 
     def stream() -> Generator:
@@ -147,7 +147,7 @@ async def chat_endpoint(request: ChatRequest):
         )
 
         def task():
-            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff", retriever=get_retriever(),condense_question_prompt=request.systemPrompt, memory = memory)
+            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=request.systemPrompt, memory = memory)
             result = qa({"question": question})
             q.put(job_done)
 
@@ -167,7 +167,6 @@ async def chat_endpoint(request: ChatRequest):
                 continue
 
     return StreamingResponse(stream())
-
 
 
 
