@@ -42,6 +42,9 @@ from langchain.chains import LLMChain
 from langchain.llms import OpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
+from fastapi import Depends, HTTPException
+from api_functions.api_utils import check_api_key
+from api_functions.rag_implementation import get_retriever
 # Initialize FastAPI app
 app = FastAPI()
 app.add_middleware(
@@ -51,7 +54,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-prompt_template = """You are a research assistant tasked with answering questions about materials science and chemistry. You have access to a database of papers on these subjects which you can query, but have no other knowledge outside of this database. You should always first query the database for information on the concepts in the question.
+prompt_template = """
+
+
+Answer the following question as best you can with the following context:
+{chat_history}
+
+Question: {question}
+
+
 
 
 {chat_history}
@@ -79,17 +90,16 @@ class QueueCallback(BaseCallbackHandler):
 
 
 @app.post("/chat")
-async def chat_endpoint(request: ChatCompletionRequest):
+async def chat_endpoint(request: ChatCompletionRequest):#token: str = Depends(check_api_key)
 
     print(request)
 
-    global run_id, feedback_recorded, trace_url, usage
+    global run_id, feedback_recorded, trace_url
     run_id = None
     trace_url = None
     feedback_recorded = False
 
     messages = request.messages
-    print(type(messages))
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     for message in messages:
         print(message)
@@ -105,20 +115,29 @@ async def chat_endpoint(request: ChatCompletionRequest):
         job_done = object()
 
         llm = ChatOpenAI(
+            # openai_api_key=token,
             model= request.model,
-            streaming=True,
-            temperature=0,
+            streaming= request.stream,
+            temperature= request.temperature,
             callbacks=[QueueCallback(q)],
         )
 
         def task():
-            llm_chain = LLMChain(
-                llm=llm,
-                prompt=PROMPT,
-                verbose=True,
-                memory=memory)
+            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=PROMPT,retriever=get_retriever(
+                url='!',
+                api_key='!',
+                atributes= ["document", "page"],
+                class_name="Test"
+
+            ), memory = memory)
+            result = qa({"question": messages[-1]["content"]})
+            # llm_chain = LLMChain(
+            #     llm=llm,
+            #     prompt=PROMPT,
+            #     verbose=True,
+            #     memory=memory)
          
-            result = llm_chain.predict(question=messages[-1]["content"])
+            # result = llm_chain.predict(question=messages[-1]["content"])
                
      
 

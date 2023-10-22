@@ -23,7 +23,7 @@ from queue import Queue, Empty
 from collections.abc import Generator
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chains import ConversationalRetrievalChain
-WEAVIATE_DOCS_INDEX_NAME = "Research2"
+WEAVIATE_DOCS_INDEX_NAME = "Test"
 app = FastAPI()
 # WEAVIATE_URL = os.environ["WEAVIATE_URL"]
 # WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
@@ -54,27 +54,24 @@ class ChatRequest(BaseModel):
 
 
 from langchain.prompts import PromptTemplate
-prompt_template = """You are a research assistant tasked with answering questions about materials science and chemistry. You have access to a database of papers on these subjects which you can query, but have no other knowledge outside of this database. You should always first query the database for information on the concepts in the question.
-
-For example, given the following input question:
+prompt_template = """For example, given the following input question:
 -----START OF EXAMPLE INPUT QUESTION-----
-What are the properties of graphene in high-pressure environments?
+What are the effects of magnetic fields on superconductors?
 -----END OF EXAMPLE INPUT QUESTION-----
 Your research flow should be:
 
-Query your search tool for information on 'Graphene properties in high-pressure environments' to get as much context as you can about it.
-Then, query your search tool for information on 'Graphene' to get as much context as you can about it.
+Query your search tool for information on 'Students Physics Labs' to get as much context as you can about it.
+Then, query your search tool for information on 'Mechanics' to get as much context as you can about it.
 Answer the question with the context you have gathered.
 For another example, given the following input question:
 -----START OF EXAMPLE INPUT QUESTION-----
-How is quantum chemistry applied in designing new materials?
+What is the formula for Newtons Second Law?
 -----END OF EXAMPLE INPUT QUESTION-----
 Your research flow should be:
 
-Query your search tool for information on 'Quantum chemistry in material design' to get as much context as you can about it.
+Query your search tool for information on 'Newtons Second Law' to get as much context as you can about it.
 Answer the question as you now have enough context.
 Include accurate references from the papers in your answer if relevant to the question. If you can't find the answer, DO NOT make up an answer. Just say you don't know.
-
 Answer the following question as best you can with the following context:
 {chat_history}
 
@@ -82,6 +79,9 @@ Question: {question}
 
 """
 PROMPT = PromptTemplate.from_template(prompt_template)
+WEAVIATE_URL = os.environ["WEAVIATE_URL"]
+WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
+
 
 chain_type_kwargs = {"prompt": PROMPT}
 def get_retriever():
@@ -147,7 +147,7 @@ async def chat_endpoint(request: ChatRequest):
         )
 
         def task():
-            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=request.systemPrompt, memory = memory)
+            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=PROMPT,retriever=get_retriever(), memory = memory)
             result = qa({"question": question})
             q.put(job_done)
 
