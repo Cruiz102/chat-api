@@ -7,41 +7,47 @@ import tempfile
 from langchain.vectorstores import Weaviate
 import weaviate
 
-
-client = weaviate.Client(
-url=WEAVIATE_URL,
-auth_client_secret=weaviate.AuthApiKey(api_key=WEAVIATE_API_KEY),
-additional_headers={
-    "X-OpenAI-Api-Key": os.environ["OPENAI_API_KEY"]
-}
-)
-
-class Weaviate_Object(BaseModel):
-    text: datetime
-    document: Tuple[int, int]
-    page: int
-    extracted_method: str
-    author: str
+import asyncio
 
 
-def create_class(class_name: str, client ):
+def init_weaviate_client(url: str, weaviate_api_key: str,openai_api_key : str):
+    client = weaviate.Client(url=url,
+                         auth_client_secret=weaviate.AuthApiKey(api_key= weaviate_api_key),
+    additional_headers={
+        "X-OpenAI-Api-Key": openai_api_key
+    }
+                          )
+    
+    return client
+
+
+
+async def check_if_class_is_created_async(client , class_name):
+
+    try:
+        response = await client.schema.get(class_name)
+        if response:
+            return True
+    except:
+        return False
+
+
+
+
+def create_class( client , class_name: str,):
     class_obj = {
         "class": class_name,
-        "vectorizer": "text2vec-openai", 
-        "moduleConfig": {
-            "text2vec-openai": {},
-            "generative-openai": {} 
-            },
+        "vectorizer": "text2vec-openai",  
         "properties": [
-            {
-                "dataType": ["string"],
-                "description": "Content of the Chunk",
-                "name": "text"
-            },
             {
                 "dataType": ["string"],
                 "description": "Name of the document",
                 "name": "document"
+            },
+            {
+                "dataType": ["string"],
+                "description": "Content of the Chunk",
+                "name": "text"
             },
             {
                 "dataType": ["int"],
@@ -53,7 +59,6 @@ def create_class(class_name: str, client ):
     }
     client.schema.create_class(class_obj)
 
-
 def add_object(client, objects_list, class_name):
     client.batch.configure(batch_size=100)
     with client.batch as batch:
@@ -64,7 +69,16 @@ def add_object(client, objects_list, class_name):
              "document": d.metadata["source"],   
              "page": d.metadata["page"]
         }
-        batch.add_data_object(
-            data_object=object,
-            class_name= class_name
-        )
+            batch.add_data_object(
+                data_object=object,
+                class_name= class_name
+            )
+
+
+if __name__ == "__main__":
+    client = init_weaviate_client(url = 'https://researchcluster-h1x0s5a1.weaviate.network', weaviate_api_key='Rf26fdIA4bLpwBdSQypkS2Y8u4cQZbekMyi8', openai_api_key='')
+    # create_class(client, "ML30")
+    # print(client.schema.get("ML30"))
+    # a = await check_if_class_is_created_async(client, "ML")
+    a  = asyncio.run(check_if_class_is_created_async(client, "ML102"))
+    print(a)
