@@ -1,3 +1,14 @@
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import List
+from langchain.document_loaders import PyPDFLoader
+import tempfile
+from langchain.vectorstores import Weaviate
+from langchain.callbacks import get_openai_callback
+import weaviate
+from fastapi.responses import JSONResponse
+
 import weaviate
 from langchain.vectorstores import Weaviate
 from langchain.embeddings import OpenAIEmbeddings
@@ -23,81 +34,36 @@ from queue import Queue, Empty
 from collections.abc import Generator
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chains import ConversationalRetrievalChain
-WEAVIATE_DOCS_INDEX_NAME = "Test"
-app = FastAPI()
-# WEAVIATE_URL = os.environ["WEAVIATE_URL"]
-# WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
 
+from protocols import ChatCompletionRequest, StreamChatCompletionResponseChoice, ChatMessage, UsageInfo, ChatCompletionResponse, StreamChatCompletionResponse, StreamChatMessage
+import json
+
+from langchain.chains import LLMChain
+from langchain.llms import OpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
+from fastapi import Depends, HTTPException
+from api_functions.api_utils import check_api_key
+from api_functions.rag_implementation import get_retriever
+# Initialize FastAPI app
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Adjust this to be more restrictive for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
-
-from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
-from typing import List, Optional
-class HistoryItem(BaseModel):
-    question: str
-    result: str
-
-class ChatRequest(BaseModel):
-    message: str
-    history: Optional[List[HistoryItem]]
-    systemPrompt: str
+prompt_template = """
 
 
-
-
-
-from langchain.prompts import PromptTemplate
-prompt_template = """For example, given the following input question:
------START OF EXAMPLE INPUT QUESTION-----
-What are the effects of magnetic fields on superconductors?
------END OF EXAMPLE INPUT QUESTION-----
-Your research flow should be:
-
-Query your search tool for information on 'Students Physics Labs' to get as much context as you can about it.
-Then, query your search tool for information on 'Mechanics' to get as much context as you can about it.
-Answer the question with the context you have gathered.
-For another example, given the following input question:
------START OF EXAMPLE INPUT QUESTION-----
-What is the formula for Newtons Second Law?
------END OF EXAMPLE INPUT QUESTION-----
-Your research flow should be:
-
-Query your search tool for information on 'Newtons Second Law' to get as much context as you can about it.
-Answer the question as you now have enough context.
-Include accurate references from the papers in your answer if relevant to the question. If you can't find the answer, DO NOT make up an answer. Just say you don't know.
-Answer the following question as best you can with the following context:
 {chat_history}
 
-Question: {question}
+ {question}
+
 
 """
 PROMPT = PromptTemplate.from_template(prompt_template)
-WEAVIATE_URL = os.environ["WEAVIATE_URL"]
-WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
-
-
-chain_type_kwargs = {"prompt": PROMPT}
-def get_retriever():
-    weaviate_client = weaviate.Client(
-        url=WEAVIATE_URL,
-        auth_client_secret=weaviate.AuthApiKey(api_key=WEAVIATE_API_KEY),
-    )
-    weaviate_client = Weaviate(
-        client=weaviate_client,
-        index_name=WEAVIATE_DOCS_INDEX_NAME,
-        text_key="text",
-        embedding=OpenAIEmbeddings(chunk_size=200),
-        by_text=False,
-        attributes=["document", "page"],
-    )
-    return weaviate_client.as_retriever(search_kwargs=dict(k=3))
 
 
 class QueueCallback(BaseCallbackHandler):
@@ -115,62 +81,101 @@ class QueueCallback(BaseCallbackHandler):
         return self.q.empty()
 
 
+
 @app.post("/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatCompletionRequest):#token: str = Depends(check_api_key)
+
+    print(request)
+
     global run_id, feedback_recorded, trace_url
     run_id = None
     trace_url = None
     feedback_recorded = False
 
-
-    question = request.message
-    chat_history = request.history
-    print(chat_history)
+    messages = request.messages
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    for message in chat_history:
+    for message in messages:
         print(message)
         memory.save_context(
-            {"question": message.question}, {"result": message.result}
+            {"role": message["role"]}, {"content": message["content"]}
         )
 
     def stream() -> Generator:
-        global run_id, trace_url, feedback_recorded
+        global run_id, trace_url, feedback_recorded, usage
+
 
         q = Queue()
         job_done = object()
 
         llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
-            streaming=True,
-            temperature=0,
+            # openai_api_key=token,
+            model= request.model,
+            streaming= request.stream,
+            temperature= request.temperature,
             callbacks=[QueueCallback(q)],
         )
 
         def task():
-            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=PROMPT,retriever=get_retriever(), memory = memory)
-            result = qa({"question": question})
+            qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=PROMPT,retriever=get_retriever(
+                url=os.getenv("WEAVIATE_URL"),
+                api_key=os.getenv("WEAVIATE_API_KEY"),
+                atributes= ["document", "page"],
+                class_name=os.getenv("CLASSNAME"),
+                text_key= "text",
+                openai_key= os.getenv("OPENAI_API_KEY")
+
+            ), memory = memory)
+            result = qa({"question": messages[-1]["content"]})
+            # llm_chain = LLMChain(
+            #     llm=llm,
+            #     prompt=PROMPT,
+            #     verbose=True,
+            #     memory=memory)
+         
+            # result = llm_chain.predict(question=messages[-1]["content"])
+               
+     
+
             q.put(job_done)
 
         t = Thread(target=task)
         t.start()
 
-        content = ""
 
         while True:
             try:
                 next_token = q.get(True, timeout=1)
+                finish_reason_value = None  # Default to None
+
+                if next_token is job_done:
+                    finish_reason_value = "stop"  # Set to "stop" for the final response
+
+    
+
+                chat_response = StreamChatCompletionResponse(
+            model=request.model,
+            choices=[StreamChatCompletionResponseChoice(
+                index=0, delta=StreamChatMessage( content=next_token if next_token is not job_done else ""),
+                finish_reason=finish_reason_value
+            )]
+        )
+
+                
+                json_data = json.dumps(chat_response.dict())
+            
+                yield f"data: {json_data}\n\n"
+
                 if next_token is job_done:
                     break
-                content += next_token
-                yield next_token
+
             except Empty:
                 continue
 
-    return StreamingResponse(stream())
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
 
 
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8080, reload=True)
