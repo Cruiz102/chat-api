@@ -35,7 +35,7 @@ from collections.abc import Generator
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chains import ConversationalRetrievalChain
 
-from protocols import ChatCompletionRequest, StreamChatCompletionResponseChoice, ChatMessage, UsageInfo, ChatCompletionResponse, StreamChatCompletionResponse, StreamChatMessage
+from protocols import WeaviateCompletionRequest, StreamChatCompletionResponseChoice, ChatMessage, UsageInfo, ChatCompletionResponse, StreamChatCompletionResponse, StreamChatMessage
 import json
 
 from langchain.chains import LLMChain
@@ -83,8 +83,11 @@ class QueueCallback(BaseCallbackHandler):
 
 
 @app.post("/chat")
-async def chat_endpoint(request: ChatCompletionRequest):#token: str = Depends(check_api_key)
-
+async def chat_endpoint(request: WeaviateCompletionRequest, token = Depends(check_api_key)):
+    # print(token)
+    # print("!!!!!!!!!")
+    # print(token.credentials)
+    # print("!!!!!!")
     print(request)
 
     global run_id, feedback_recorded, trace_url
@@ -108,21 +111,22 @@ async def chat_endpoint(request: ChatCompletionRequest):#token: str = Depends(ch
         job_done = object()
 
         llm = ChatOpenAI(
-            # openai_api_key=token,
+            openai_api_key=token.credentials,
             model= request.model,
             streaming= request.stream,
             temperature= request.temperature,
             callbacks=[QueueCallback(q)],
+            request_timeout=120
         )
 
         def task():
             qa = ConversationalRetrievalChain.from_llm(llm=llm, chain_type="stuff",condense_question_prompt=PROMPT,retriever=get_retriever(
-                url=os.getenv("WEAVIATE_URL"),
-                api_key=os.getenv("WEAVIATE_API_KEY"),
+                url=request.weaviate_url,
+                api_key=request.weaviate_api_key,
                 atributes= ["document", "page"],
-                class_name=os.getenv("CLASSNAME"),
+                class_name=request.weaviate_class_name,
                 text_key= "text",
-                openai_key= os.getenv("OPENAI_API_KEY")
+                openai_key= token.credentials
 
             ), memory = memory)
             result = qa({"question": messages[-1]["content"]})
@@ -162,7 +166,7 @@ async def chat_endpoint(request: ChatCompletionRequest):#token: str = Depends(ch
 
                 
                 json_data = json.dumps(chat_response.dict())
-            
+                print(json_data)
                 yield f"data: {json_data}\n\n"
 
                 if next_token is job_done:
@@ -178,4 +182,4 @@ async def chat_endpoint(request: ChatCompletionRequest):#token: str = Depends(ch
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8080, reload=False)

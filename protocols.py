@@ -5,20 +5,11 @@ import shortuuid
 import time
 
 
-class APIChatCompletionRequest(BaseModel):
+class WeaviateCompletionRequest(BaseModel):
     model: str
-    messages: Union[str, List[Dict[str, str]]]
-    temperature: Optional[float] = 0.7
-    top_p: Optional[float] = 1.0
-    n: Optional[int] = 1
-    max_tokens: Optional[int] = None
-    stop: Optional[Union[str, List[str]]] = None
-    stream: Optional[bool] = False
-    user: Optional[str] = None
-    repetition_penalty: Optional[float] = 1.0
-
-class ChatCompletionRequest(BaseModel):
-    model: str
+    weaviate_url: str
+    weaviate_api_key: str
+    weaviate_class_name: str
     messages: Union[str, List[Dict[str, str]]]
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 1.0

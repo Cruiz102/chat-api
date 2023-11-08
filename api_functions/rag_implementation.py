@@ -17,7 +17,7 @@ def get_retriever(url: str,api_key: str,openai_key: str, class_name:str, atribut
         client=weaviate_client,
         index_name= class_name,
         text_key=text_key,
-        embedding=OpenAIEmbeddings(chunk_size=200),
+        embedding=OpenAIEmbeddings(openai_api_key= openai_key,chunk_size=200),
         by_text=False,
         attributes=atributes,
     )

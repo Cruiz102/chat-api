@@ -17,57 +17,22 @@ from pydantic import BaseSettings
 import shortuuid
 import tiktoken
 import uvicorn
-from protocols import APIChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseChoice, ChatCompletionRequest, UsageInfo
+from protocols import  ChatCompletionResponse, ChatCompletionResponseChoice, UsageInfo
 
 get_bearer_token = HTTPBearer(auto_error=False)
 
 async def check_api_key(
     auth: Optional[HTTPAuthorizationCredentials] = Depends(get_bearer_token),
 ) -> str:
-    if app_settings.api_keys:
-        if auth is None or (token := auth.credentials) not in app_settings.api_keys:
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "",
-                        "type": "invalid_request_error",
-                        "param": None,
-                        "code": "invalid_api_key",
-                    }
-                },
-            )
-        return token
-    else:
-        # api_keys not set; allow all
-        return None
-    
+
+        return auth
 
 
 
 
-    import os
 
-async def check_api_key(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(get_bearer_token),
-) -> str:
-    env_api_keys = os.environ.get("API_KEYS", "")
-    env_api_keys_list = env_api_keys.split(",") if env_api_keys else []
+# async def check_api_key(
+#     auth: Optional[HTTPAuthorizationCredentials] = Depends(get_bearer_token),
+# ) -> str:
 
-    if app_settings.api_keys or env_api_keys_list:
-        if auth is None or (token := auth.credentials) not in (app_settings.api_keys + env_api_keys_list):
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "",
-                        "type": "invalid_request_error",
-                        "param": None,
-                        "code": "invalid_api_key",
-                    }
-                },
-            )
-        return token
-    else:
-        # api_keys not set; allow all
-        return None
+#         return auth
