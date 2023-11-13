@@ -97,7 +97,7 @@ async def chat_endpoint(request: WeaviateCompletionRequest, token = Depends(chec
 
     messages = request.messages
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    for message in messages:
+    for message in messages[:-1]:
         print(message)
         memory.save_context(
             {"role": message["role"]}, {"content": message["content"]}
@@ -116,7 +116,7 @@ async def chat_endpoint(request: WeaviateCompletionRequest, token = Depends(chec
             streaming= request.stream,
             temperature= request.temperature,
             callbacks=[QueueCallback(q)],
-            request_timeout=120
+      
         )
 
         def task():
@@ -164,9 +164,7 @@ async def chat_endpoint(request: WeaviateCompletionRequest, token = Depends(chec
             )]
         )
 
-                
                 json_data = json.dumps(chat_response.dict())
-                print(json_data)
                 yield f"data: {json_data}\n\n"
 
                 if next_token is job_done:
