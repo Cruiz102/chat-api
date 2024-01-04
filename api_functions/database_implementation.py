@@ -54,6 +54,7 @@ def create_class( client , class_name: str,):
                 "description": "Page of the document where is the chunk",
                 "name": "page"
             },
+            
 
         ]
     }
@@ -66,8 +67,8 @@ def add_object(client, objects_list, class_name):
             print(f"importing question: {i+1}")
             object = {
             "text": d.page_content,
-             "document": d.metadata["source"],   
-             "page": d.metadata["page"]
+             "document": d.metadata.get("source", ""),   
+             "page": d.metadata.get("page", "")
         }
             batch.add_data_object(
                 data_object=object,

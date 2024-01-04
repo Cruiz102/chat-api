@@ -16,10 +16,15 @@ import tempfile
 from api_functions.database_implementation import init_weaviate_client, add_object, create_class
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from api_functions.api_utils import list_files_recursively
 import fitz  # PyMuPDF
 import io
 from PIL import Image
 from fastapi import Form
+from langchain.text_splitter import (
+    Language,
+    RecursiveCharacterTextSplitter,
+)
 # WEAVIATE_URL = os.environ["WEAVIATE_URL"]
 # WEAVIATE_API_KEY = os.environ["WEAVIATE_API_KEY"]
 
@@ -34,9 +39,12 @@ class UploadPDFRequest(BaseModel):
     openai_api_key: str
     class_name: str
 
-
-def list_pdf_files(directory):
-    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.pdf')]
+class DirectoryRequest(BaseModel):
+    directory: str
+    url: str
+    weaviate_api_key: str
+    openai_api_key: str
+    class_name: str
 
 
 app = FastAPI()
@@ -49,8 +57,13 @@ app.add_middleware(
 )
 
 
-@app.post("/upload_pdf/")
-async def upload_pdf(
+def split_text_into_chunks(file: str):
+    pass
+
+
+
+@app.post("/upload_data/")
+async def upload_data(
     url: str = Form(...),
     weaviate_api_key: str = Form(...),
     openai_api_key: str = Form(...),
@@ -69,15 +82,24 @@ async def upload_pdf(
         temp_file.write(content)
         temp_file.close()
 
-        # Use PyPDFLoader to load and split the PDF
-        # For now, use OCR is disabled
-        if should_use_ocr(pdf_path) and False:
-            main()
-        else:
+        file_extension = file.filename.split('.')[-1].lower()
+
+
+        if file_extension == 'pdf':
             loader = PyPDFLoader(pdf_path)
             pages = loader.load_and_split()
+        elif file_extension in ['py', 'js', 'ts', 'c']:
+            # Lee el contenido del archivo de código fuente
+            with open(pdf_path, 'r', encoding='utf-8') as code_file:
+                code_content = code_file.read()
 
-        # exist =  await check_if_class_is_created(client, class_name)
+            # Procesa el contenido del archivo de código
+            python_splitter = RecursiveCharacterTextSplitter.from_language(
+                language=Language.PYTHON, chunk_size=512, chunk_overlap=0
+            )
+            python_docs = python_splitter.create_documents([code_content])
+        
+        
 
         try:
             create_class(client= client, class_name= class_name)
@@ -92,19 +114,48 @@ async def upload_pdf(
         return HTTPException(status_code=500, detail=str(e))
     
 
+# ... [importaciones existentes] ...
 
-@app.post("/create_class/")
-async def create_and_get_class(
-    url: str = Form(...),
-    weaviate_api_key: str = Form(...),
-    openai_api_key: str = Form(...),
-    class_name: str = Form(...),
-):
-    client =init_weaviate_client(url=url, weaviate_api_key=weaviate_api_key, openai_api_key=openai_api_key)
-    create_class(client, class_name)
-    class_schema = client.schema.get(class_name)
-    print(class_schema)
-    return {"message": "Class created and schema printed.", "schema": class_schema}
+@app.post("/process_directory/")
+async def process_directory(request: DirectoryRequest):
+    try:
+        client = init_weaviate_client(
+            url=request.url,
+            weaviate_api_key=request.weaviate_api_key,
+            openai_api_key=request.openai_api_key
+        )
+
+        # Lista de extensiones de archivos a procesar
+        file_extensions = ['.pdf', '.py', '.js', '.ts', '.c']
+
+        # Obtén un diccionario de archivos por extensión
+        files_by_extension = list_files_recursively(request.directory, file_extensions)
+
+        for ext, files in files_by_extension.items():
+            filename = os.path.basename(file_path)
+            for file_path in files:
+                if ext == '.pdf':
+                    # Procesa archivos PDF
+                    loader = PyPDFLoader(file_path)
+                    pages = loader.load_and_split()
+                    add_object(client, pages, request.class_name)
+
+                elif ext in ['.py', '.js', '.ts', '.c']:
+                    # Procesa archivos de código
+                    with open(file_path, 'r', encoding='utf-8') as code_file:
+                        code_content = code_file.read()
+
+                    # Ajusta el lenguaje según la extensión del archivo
+                    language = Language.PYTHON if ext == '.py' else Language.OTHER
+                    python_splitter = RecursiveCharacterTextSplitter.from_language(
+                        language=language, chunk_size=512, chunk_overlap=0
+                    )
+                    python_docs = python_splitter.create_documents([code_content], metadatas=[{"source": filename}])
+                    add_object(client, python_docs, request.class_name)
+
+        return JSONResponse(content={"status": "success", "message": "Processed files in the directory and its subdirectories"})
+    except Exception as e:
+        return HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

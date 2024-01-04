@@ -29,6 +29,20 @@ async def check_api_key(
 
 
 
+from typing import Dict, List
+
+def list_files_recursively(directory: str, file_extensions: List[str]) -> Dict[str, List[str]]:
+    """Lista todos los archivos con extensiones específicas en un directorio y subdirectorios de manera recursiva."""
+    files_by_extension = {ext: [] for ext in file_extensions}
+    
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            for ext in file_extensions:
+                if file.endswith(ext):
+                    files_by_extension[ext].append(os.path.join(root, file))
+                    break  # Si el archivo coincide con una extensión, no es necesario comprobar las demás
+
+    return files_by_extension
 
 
 # async def check_api_key(

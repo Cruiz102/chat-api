@@ -1,22 +1,146 @@
-import json
-from langchain.document_loaders import TextLoader
-import tempfile
-with open('/home/cesarruiz/Projects/langchain/output.json', 'r') as file:
-    data_json = json.load(file)
-    # print(data_json['document']['pages'][3]['blocks'][1]['layout']['textAnchor']['textSegments'][0]['startIndex'])
-    startIndex = int(data_json['document']['pages'][0]['blocks'][1]['layout']['textAnchor']['textSegments'][0]['startIndex'])
-    endIndex = int(data_json['document']['pages'][0]['blocks'][1]['layout']['textAnchor']['textSegments'][0]['endIndex'])
-    # with tempfile.NamedTemporaryFile(delete=False, suffix='.txt') as temp_file:
-    #     temp_file.write(data.encode('utf-8'))
-    #     temp_path = temp_file.name
+from langchain.text_splitter import (
+    Language,
+    RecursiveCharacterTextSplitter,
+)
 
-    # loader = TextLoader(temp_path)
-    # pages = loader.load_and_split()
-    # pages[0].metadata["page"] = 4
-    # print(pages[0])
 
-# print("\n\n\n\n\n\n   HOLLLLAA")
-# import json
-# from langchain.document_loaders import JSONLoader
-# file_path='./example_data/facebook_chat.json'
-# data = json.loads(Path(file_path).read_text())
+# You can also see the separators used for a given language
+RecursiveCharacterTextSplitter.get_separators_for_language(Language.PYTHON)
+
+
+
+
+PYTHON_CODE = """
+
+import logging
+import os
+from bs4 import BeautifulSoup
+import weaviate
+from langchain.document_loaders import PyPDFLoader
+from langchain.document_loaders.recursive_url_loader import RecursiveUrlLoader
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import Weaviate
+from langchain.document_transformers import Html2TextTransformer
+# from constants import (WEAVIATE_DOCS_INDEX_NAME,)
+import argparse
+
+WEAVIATE_URL = '!'
+WEAVIATE_API_KEY = '!'
+
+
+
+import os
+
+def list_pdf_files(directory):
+    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.pdf')]
+
+
+
+def create_class(class_name: str, client ):
+    class_obj = {
+        "class": class_name,
+        "vectorizer": "text2vec-openai", 
+        "moduleConfig": {
+            "text2vec-openai": {
+                 "vectorizeClassName": True,
+            },
+            "generative-openai": {} 
+            },
+        "properties": [
+            {
+                "dataType": ["string"],
+                "description": "Name of the document",
+                "name": "document"
+            },
+            {
+                "dataType": ["string"],
+                "description": "Content of the Chunk",
+                "name": "text"
+            },
+            {
+                "dataType": ["int"],
+                "description": "Page of the document where is the chunk",
+                "name": "page"
+            },
+
+        ]
+    }
+    client.schema.create_class(class_obj)
+
+def add_object(client, objects_list, class_name):
+    client.batch.configure(batch_size=100)
+    with client.batch as batch:
+        for i, d in enumerate(objects_list):
+            print(f"importing question: {i+1}")
+            object = {
+             "document": d.metadata["source"],   
+             "text": d.page_content,
+             "page": d.metadata["page"]
+        }
+            batch.add_data_object(
+                data_object=object,
+                class_name= class_name
+            )
+
+
+
+def ingest_docs(args, client):
+    documents = list_pdf_files(args.pdf_folder)
+    # Check for errors when loading the pdfs
+    if not isinstance(documents, str):
+        assert(documents)
+    for doc in documents:
+        # print(doc)
+        # pass
+        # # print(type(doc))
+        loader = PyPDFLoader(doc)
+        pages = loader.load_and_split()
+        add_object(client, pages, args.class_name)
+
+
+    
+    # vectorstore = Weaviate(
+    #     client,
+    #     WEAVIATE_DOCS_INDEX_NAME,
+    #     "text",
+    #     embedding=embedding,
+    #     by_text=False,
+    #     attributes=["source"],
+    # )
+    
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Ingest PDFs into Weaviate database.")
+    parser.add_argument("--pdf_folder", type=str, help="Path to the folder containing PDFs.")
+    parser.add_argument("--class_name", type=str, help="Class where to save the object in the schema.")
+    parser.add_argument("--new_class", type=str, help="Class where to save the object in the schema.")
+
+    args = parser.parse_args()
+    client = weaviate.Client(
+    url=WEAVIATE_URL,
+    auth_client_secret=weaviate.AuthApiKey(api_key=WEAVIATE_API_KEY),
+    additional_headers={
+        "X-OpenAI-Api-Key": os.environ["OPENAI_API_KEY"]
+    }
+
+)
+    response = client.schema.get("Test")
+    print(response)
+    # if args.new_class:
+    #     create_class(args.class_name, client)
+    # ingest_docs(args, client)
+
+"""
+python_splitter = RecursiveCharacterTextSplitter.from_language(
+    language=Language.PYTHON, chunk_size=512, chunk_overlap=0
+)
+python_docs = python_splitter.create_documents([PYTHON_CODE])
+
+counter = 0
+for i in python_docs:
+    counter += 1
+    print(counter)
+    print("\n\n")
+    print(i)
+    
