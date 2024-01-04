@@ -68,7 +68,7 @@ def add_object(client, objects_list, class_name):
             object = {
             "text": d.page_content,
              "document": d.metadata.get("source", ""),   
-             "page": d.metadata.get("page", "")
+             "page": d.metadata.get("page", 0)
         }
             batch.add_data_object(
                 data_object=object,

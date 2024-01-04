@@ -12,14 +12,14 @@ client = weaviate.Client(url=os.getenv("WEAVIATE_URL"),
     }
                           )
 
-vectorstore = Weaviate(client, index_name="ML104", text_key="text",
+vectorstore = Weaviate(client, index_name=os.getenv("CLASSNAME"), text_key="text",
                     
                        embedding=OpenAIEmbeddings(chunk_size=200)).as_retriever()
 
 
 
-response = client.schema.get("ML104")
-print(response)
+# response = client.schema.get("ML104")
+# print(response)
 
 MyOpenAI = OpenAI(temperature=0,
     openai_api_key=os.environ["OPENAI_API_KEY"])

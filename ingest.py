@@ -125,6 +125,14 @@ async def process_directory(request: DirectoryRequest):
             openai_api_key=request.openai_api_key
         )
 
+
+
+        try:
+            create_class(client, request.class_name)
+        except Exception as e:
+            print(f"Class already exists or error creating class: {e}")
+
+
         # Lista de extensiones de archivos a procesar
         file_extensions = ['.pdf', '.py', '.js', '.ts', '.c']
 
@@ -132,8 +140,8 @@ async def process_directory(request: DirectoryRequest):
         files_by_extension = list_files_recursively(request.directory, file_extensions)
 
         for ext, files in files_by_extension.items():
-            filename = os.path.basename(file_path)
             for file_path in files:
+                filename = os.path.basename(file_path)
                 if ext == '.pdf':
                     # Procesa archivos PDF
                     loader = PyPDFLoader(file_path)
