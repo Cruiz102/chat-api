@@ -1,59 +1,76 @@
 import unittest
-from graph_text import extract_function_calls, filter_out_library_and_builtin_calls, get_code_functions_from_path
-import tempfile
+from python_parser import pythonParser
 import os
+import tempfile
+import ast
 
-class TestFunctionFilter(unittest.TestCase):
+class TestPythonParser(unittest.TestCase):
 
-    def filter_methods_of_objects(self):
-        """Filter the function that are methods of objects"""
+    def test_get_function_body(self):
+        # Test the get_function_body method
+        source_code = """def example_function(arg1, arg2):
+                             return arg1 + arg2"""
+        node = ast.parse(source_code)
+        function_node = node.body[0]  # Assuming there is only one function
 
-    def test_full_function_body_extract(self):
-        code = """
-        def example():
-            print("Hello")
-            custom_func()
-        """
-        expected_message = "Function definition detected in function body. This function expects only the body of another function, not a full function definition."
-        with self.assertRaises(ValueError) as context:
-            extract_function_calls(code)
+        # Manually splitting the source code into lines to simulate 'source_lines'
+        source_lines = source_code.split('\n')
+
+        expected_body = 'def example_function(arg1, arg2):\n                             return arg1 + arg2'
+        result = pythonParser.get_function_body(source_lines, function_node)
+        self.assertEqual(result, expected_body)
+
+    def test_parse_python_functions(self):
+        # Test the parse_python_functions method
+        # Create a temporary Python file
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as tmp:
+            tmp.write("def foo():\n    return 'bar'")
+            tmp_file_path = tmp.name
+
+        expected_result = {
+            'foo': {
+                "name": "foo",
+                'body': "def foo():\n    return 'bar'",
+                'called_functions': [],
+                'class_name': None
+            }
+            
+        }
+        result = pythonParser().parse_python_functions(tmp_file_path)
+        self.assertEqual(result, expected_result)
+
+        # Clean up the temporary file
+        os.remove(tmp_file_path)
+
+    def test_filter_callables(self):
+        # Test the _filter_callables method
+        parser = pythonParser(filtered_libraries_aliases=['os'])
+        callables = ['print', 'os.path.join', 'custom_function']
+        parser._filter_callables(callables)
         
-        self.assertEqual(str(context.exception), expected_message)
+        # Assuming 'os.path.join' is in the filtered_libraries_aliases
+        expected_result = ['custom_function']
+        self.assertEqual(callables, expected_result)
 
-    def test_filter_out_library_and_builtin_calls(self):
-        function_calls = {'print', 'custom_func', 'np.array'}
-        library_aliases = ['np']
-        expected = {'custom_func'}
-        result = filter_out_library_and_builtin_calls(function_calls, library_aliases)
-        self.assertEqual(result, expected)
+    def test_traverse_through_directory(self):
+        # Test the traverse_through_directory method
+        # Create a temporary directory and files
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path_1 = os.path.join(tmp_dir, 'test1.py')
+            with open(file_path_1, 'w') as f:
+                f.write("def foo():\n    return 'bar'")
 
-    def test_analyze_python_file(self):
-        mock_code = """
-            def mock_function():
-                np.array([1, 2, 3])
-                do_something()
-                torch.nn.Module()
-                result = process_data()
-                print()
-                return something
-            """
-        library_aliases = ['np', 'torch']
+            file_path_2 = os.path.join(tmp_dir, 'test2.py')
+            with open(file_path_2, 'w') as f:
+                f.write("def bar():\n    return 'foo'")
 
-        # Create a temporary file in the /tmp directory and write mock code to it
-        with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.py', dir='/tmp') as temp:
-            temp.write(mock_code)
-            temp_file_path = temp.name
+            result = pythonParser().traverse_through_directory(tmp_dir)
+            expected_keys = {os.path.basename(file_path_1), os.path.basename(file_path_2)}
+            self.assertEqual(set(result.keys()), expected_keys)
 
-        # Test analyze_python_file function
-        try:
-            results = get_code_functions_from_path(temp_file_path, library_aliases)
-            self.assertTrue(len(results) > 0)  # Check if there's at least one function analyzed
-            for _, function_body, non_library_builtin_calls in results:
-                self.assertNotIn('np.array', non_library_builtin_calls)
-                self.assertNotIn('torch.nn.Module', non_library_builtin_calls)
-        finally:
-            # Clean up - remove the temporary file
-            os.remove(temp_file_path)
+            # Asserting the function names in each file
+            self.assertIn('foo', result[os.path.basename(file_path_1)])
+            self.assertIn('bar', result[os.path.basename(file_path_2)])
 
 if __name__ == '__main__':
     unittest.main()

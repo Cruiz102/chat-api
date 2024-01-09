@@ -104,7 +104,7 @@ struct DependencyType:
         return Self { value: value }
 
 
-struct DependencyGraph:
+struct DependencyGraph(Movable):
         """
         Class for managing
 
@@ -129,10 +129,11 @@ struct DependencyGraph:
         self.number_of_executers = 1
         self.QueueDirectories = DynamicVector[String](20)
 
+    fn __moveinit__(inout self, owned existing: Self):
+        self.InitialDirectory = existing.InitialDirectory
 
-        var e = FunctionNode(functionName = "d", classOwnership = "Yes",filepath= "d")
-
-        self.NodeCollection.append(e)
+    fn __copyinit__(inout self, existing: Self):
+        self.InitialDirectory = existing.InitialDirectory
 
     fn search_files(inout self):
         """
@@ -174,15 +175,14 @@ struct DependencyGraph:
 struct Executors:
     var max_depth: Int
     var head_directory: Path
-    var GlobalNodeCollection : AnyPointer[DynamicVector[FunctionNode]]
+    var GlobalDependencyGraph : AnyPointer[DependencyGraph]
     var QueueDirectories: DynamicVector[String]
-    
 
-    fn __init__(inout self, head_directory: String, max_depth: Int, GlobalNodeCollection: DynamicVector[FunctionNode]):
+    fn __init__(inout self, head_directory: String, max_depth: Int, GlobalDependencyGraph: DependencyGraph):
         self.max_depth = max_depth
         self.head_directory = Path(head_directory)
-        self.GlobalNodeCollection = AnyPointer[DynamicVector[FunctionNode]]().alloc(1)
-        self.GlobalNodeCollection.emplace_value(GlobalNodeCollection)
+        self.GlobalDependencyGraph = AnyPointer[DependencyGraph]().alloc(1)
+        self.GlobalDependencyGraph.emplace_value(GlobalDependencyGraph)
         self.QueueDirectories = DynamicVector[String]()
 
 
