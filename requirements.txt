@@ -1,9 +1,9 @@
-openai
+pillow
 fastapi
 websockets
-langchain
+langchain-community
 uvicorn
 weaviate-client
 tiktoken
-
-
+pymupdf
+shortuuid 

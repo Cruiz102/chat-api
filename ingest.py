@@ -1,8 +1,5 @@
 """Load html from files, clean up, split, ingest into Weaviate."""
-import logging
 import os
-from bs4 import BeautifulSoup
-import weaviate
 from langchain.document_loaders import PyPDFLoader
 from langchain.document_loaders.recursive_url_loader import RecursiveUrlLoader
 from langchain.embeddings import OpenAIEmbeddings
@@ -17,7 +14,6 @@ from api_functions.database_implementation import init_weaviate_client, add_obje
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api_functions.api_utils import list_files_recursively
-import fitz  # PyMuPDF
 import io
 from PIL import Image
 from fastapi import Form
