@@ -1,7 +1,7 @@
 pillow
 fastapi
 websockets
-langchain-community
+langchain
 uvicorn
 weaviate-client
 tiktoken

@@ -1,8 +1,8 @@
 {
-    "devCommand": "uvicorn ingest:app --host 0.0.0.0 --port 3000 --reload",
+    "devCommand": "uvicorn main:app --host 0.0.0.0 --port 3000 --reload",
     "builds": [
         {
-            "src":"ingest.py",
+            "src":"main.py",
             "use": "@vercel/python"
         }
     ],
